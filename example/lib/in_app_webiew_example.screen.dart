@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 // import 'dart:convert';
 import 'dart:io';
@@ -28,7 +29,7 @@ class _InAppWebViewExampleScreenState extends State<InAppWebViewExampleScreen> {
         useHybridComposition: true,
       ),
       ios: IOSInAppWebViewOptions(
-        allowsInlineMediaPlayback: true,
+        allowsInlineMediaPlayback: false,
       ));
 
   late PullToRefreshController pullToRefreshController;
@@ -75,6 +76,7 @@ class _InAppWebViewExampleScreenState extends State<InAppWebViewExampleScreen> {
     pullToRefreshController = PullToRefreshController(
       options: PullToRefreshOptions(
         color: Colors.blue,
+        // backgroundColor: Colors.red,
       ),
       onRefresh: () async {
         if (Platform.isAndroid) {
@@ -95,7 +97,7 @@ class _InAppWebViewExampleScreenState extends State<InAppWebViewExampleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(title: Text("InAppWebView")),
+        appBar: AppBar(title: Text("InAppWebViewExampleScreen")),
         drawer: myDrawer(context: context),
         body: SafeArea(
             child: Column(children: <Widget>[
@@ -116,15 +118,26 @@ class _InAppWebViewExampleScreenState extends State<InAppWebViewExampleScreen> {
               children: [
                 InAppWebView(
                   key: webViewKey,
-                  // contextMenu: contextMenu,
-                  initialUrlRequest:
-                      URLRequest(url: Uri.parse("https://github.com/flutter")),
-                  // initialFile: "assets/index.html",
+                  contextMenu: contextMenu,
+                  // initialUrlRequest:
+                      // URLRequest(url: Uri.parse("https://github.com/flutter")),
+                  initialFile: "assets/test.html",
                   initialUserScripts: UnmodifiableListView<UserScript>([]),
                   initialOptions: options,
                   pullToRefreshController: pullToRefreshController,
                   onWebViewCreated: (controller) {
                     webViewController = controller;
+                    var userScript1 = UserScript(
+                        source: "window.foo = 49;",
+                        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START);
+                    var userScript2 = UserScript(
+                        source: "window.bar = 19;",
+                        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_END);
+                    webViewController?.addUserScripts(userScripts: [userScript1, userScript2]);
+
+                    webViewController?.addJavaScriptHandler(handlerName: 'cc', callback: (List<dynamic>args) {
+                      print('bridge cc: $args');
+                    });
                   },
                   onLoadStart: (controller, url) {
                     setState(() {
@@ -141,6 +154,21 @@ class _InAppWebViewExampleScreenState extends State<InAppWebViewExampleScreen> {
                   shouldOverrideUrlLoading:
                       (controller, navigationAction) async {
                     var uri = navigationAction.request.url!;
+
+                    if (uri.scheme == 'trovoapi') {
+                      if (uri.pathSegments.length == 0) {
+                        print('error method is null.');
+                        return NavigationActionPolicy.CANCEL;
+                      }
+                      print('module:${uri.host} -- method:${uri.pathSegments[0]}');
+                      print('params:${uri.queryParameters}');
+                      bool hasCarryPage = false;
+                      hasCarryPage = uri.queryParameters['hasCarryPage'] != null ? true : false;
+                      if (hasCarryPage) {
+                        // TODO: 跳转承接页
+                      }
+                      return NavigationActionPolicy.CANCEL;
+                    }
 
                     if (![
                       "http",
@@ -195,6 +223,7 @@ class _InAppWebViewExampleScreenState extends State<InAppWebViewExampleScreen> {
                 progress < 1.0
                     ? LinearProgressIndicator(value: progress)
                     : Container(),
+                Align(child: Container(height: 130, color: Colors.orange.withOpacity(0.2)), alignment: Alignment.bottomCenter,),
               ],
             ),
           ),
@@ -219,6 +248,16 @@ class _InAppWebViewExampleScreenState extends State<InAppWebViewExampleScreen> {
                   webViewController?.reload();
                 },
               ),
+              ElevatedButton(onPressed: () {
+                // webViewController?.reload();
+                // await pageLoads.stream.first;
+                webViewController?.evaluateJavascript(source: "window.foo;").then((value) => print(value));
+                webViewController?.evaluateJavascript(source: "window.bar;").then((value) => print(value));
+
+                webViewController?.evaluateJavascript(source:'Toaster.postMessage("123");');
+
+                webViewController?.getTitle().then((value) => print(value));
+              }, child: Icon(Icons.title))
             ],
           ),
         ])));
